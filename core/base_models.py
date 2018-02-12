@@ -5,17 +5,24 @@ from django.core.exceptions import ValidationError
 from pymongo import MongoClient
 
 
-class BaseDocumentModel:
+class DocumentModelType(type):
     """
-    Base model for MongoDB
+    Class-factory for Document model
+    """
+    def __init__(cls, name, bases, attrs):
+        super(DocumentModelType, cls).__init__(name, bases, attrs)
+        cls._collection = cls.get_collection()
+
+
+class BaseDocumentModel(metaclass=DocumentModelType):
+    """
+    Abstract base model for MongoDB
     """
     _pre_save_hooks = []
     _connection = MongoClient(settings.MONGODB_URI)
-    collection = None  # Needs to add collection
+    _collection = _connection
     validate_fields = True
-    fields = {
-        'created_at': datetime.datetime
-    }
+    fields = {}
 
     def __init__(self, data, validate_fields=True, validators=list()):
         self.data = data
@@ -23,6 +30,22 @@ class BaseDocumentModel:
         self.validation_errors = {}
         self._pre_save_hooks = validators
         self._id = data.get('_id')
+
+    @classmethod
+    def get_collection(cls):
+        """
+        Returns collection corresponding to the class.
+        """
+        return cls._connection[settings.MONGODB_NAME][cls._get_collection_name()]
+
+    @classmethod
+    def _get_collection_name(cls):
+        """
+        Returns name of the mongodb collection which is mapped by the class.
+        defaults to lowercase name of the class
+        """
+        return cls.Meta.collection_name if cls.Meta.collection_name\
+            else cls.__name__.lower()
 
     def validate_data_type(self):
         """
@@ -87,8 +110,8 @@ class BaseDocumentModel:
         Updates existing document
         """
         self.data["updated_at"] = datetime.datetime.utcnow()
-        self.collection.update_one(
-            {'_id': self.data['_id']},
+        self._collection.update_one(
+            {"_id": self.data["_id"]},
             {"$set": self.data},
             upsert=False
         )
@@ -99,5 +122,11 @@ class BaseDocumentModel:
         """
         self.data["created_at"] = datetime.datetime.utcnow()
         self.data["updated_at"] = datetime.datetime.utcnow()
-        self.collection.insert_one(self.data)  # `self.data` will be updated with key `_id`
-        self._id = self.data['_id']
+        self._collection.insert_one(self.data)  # `self.data` will be updated with key `_id`
+        self._id = self.data["_id"]
+
+    class Meta:
+        """
+        Meta field descriptions are set here
+        """
+        collection_name = None
