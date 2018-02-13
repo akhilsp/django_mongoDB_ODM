@@ -1,6 +1,8 @@
 import datetime
 
-from django.conf import settings
+# from django.conf import settings
+from tests import settings
+
 from django.core.exceptions import ValidationError
 from pymongo import MongoClient
 
